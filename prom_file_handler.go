@@ -3,9 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strings"
 	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 type promHandler struct {
@@ -18,7 +20,7 @@ func newPromFileHandler(config envConfig) (*promHandler, error) {
 		return nil, fmt.Errorf("file does not have .json extension")
 	}
 
-	err := syscall.Access(config.PrometheusConfigFilePath, syscall.O_RDWR)
+	err := unix.Access(config.PrometheusConfigFilePath, syscall.O_RDWR)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +43,7 @@ func (h *promHandler) write(containersScrapeConfig map[string]containerScrapeCon
 		return err
 	}
 	log.Debugf("Write %s to %s", string(data), h.config.PrometheusConfigFilePath)
-	err = ioutil.WriteFile(h.config.PrometheusConfigFilePath, data, 0644)
+	err = os.WriteFile(h.config.PrometheusConfigFilePath, data, 0644)
 	if err != nil {
 		return err
 	}

@@ -1,60 +1,63 @@
+VERSION		?= v1.0.2
+VERSION_MAJOR	:= $(shell echo $(VERSION) | cut -f1 -d.)
+VERSION_MINOR	:= $(shell echo $(VERSION) | cut -f2 -d.)
+BINARY_NAME	:= prometheus-docker-labels-discovery
 
-VERSION=v1.0.2
-GOOS=linux
-GOCMD=go
-GOBUILD=$(GOCMD) build
-GOCLEAN=$(GOCMD) clean
-GOTEST=$(GOCMD) test
-GOLINT=golangci-lint run
-BUILD_PLATFORM=linux/amd64
-PACKAGE_PLATFORM=$(BUILD_PLATFORM),linux/arm64,linux/arm/v7
-VERSION_MAJOR=$(shell echo $(VERSION) | cut -f1 -d.)
-VERSION_MINOR=$(shell echo $(VERSION) | cut -f2 -d.)
-BINARY_NAME=prometheus-docker-labels-discovery
-GO_PACKAGE=sqooba/prometheus-docker-labels-discovery
-DOCKER_REGISTRY=
-GIT_COMMIT=$(shell git rev-parse HEAD)
-GIT_DIRTY=$(shell test -n "`git status --porcelain`" && echo "+CHANGES" || true)
-BUILD_DATE=$(shell date '+%Y-%m-%d-%H:%M:%S')
+GIT_COMMIT	:= $(shell git rev-parse HEAD)
+GIT_DIRTY	:= $(shell test -n "`git status --porcelain`" && echo "+CHANGES" || true)
+BUILD_DATE	:= $(shell date '+%Y-%m-%d-%H:%M:%S')
 
-ensure:
-	GOOS=${GOOS} $(GOCMD) mod vendor
+GOOS		?= $(shell go env GOOS)
+GOARCH		?= $(shell go env GOARCH)
+GO_BUILDTAGS	?= osusergo netgo
+GO_ENV		+= GOOS=$(GOOS) GOARCH=$(GOARCH)
+GO_LDFLAGS	+= -X 'github.com/sqooba/go-common/version.GitCommit=$(GIT_COMMIT)$(GIT_DIRTY)' \
+		   -X 'github.com/sqooba/go-common/version.BuildDate=$(BUILD_DATE)' \
+		   -X 'github.com/sqooba/go-common/version.Version=$(VERSION)'
+GO_BUILDTAGS	+= $(GO_BUILDTAGS_EXTRA)
+GO_BUILDFLAGS	+= -tags "$(GO_BUILDTAGS)" \
+		   -ldflags "$(GO_LDFLAGS)" \
+		   $(GO_BUILDFLAGS_EXTRA)
 
-clean:
-	$(GOCLEAN)
-
-lint:
-	$(GOLINT) ...
+DOCKER_REGISTRY	?= ghcr.io/
+DOCKER_IMAGE	?= 0rax/prometheus-docker-labels-discovery
 
 build:
-	GOOS=${GOOS} $(GOBUILD) \
-		-ldflags "-X version.GitCommit=${GIT_COMMIT}${GIT_DIRTY} \
-				  -X github.com/sqooba/go-common/version.BuildDate=${BUILD_DATE} \
-				  -X github.com/sqooba/go-common/version.Version=${VERSION}" \
-		-o ${BINARY_NAME} .
+	$(GO_ENV) go build $(GO_BUILDFLAGS) -o $(BINARY_NAME) .
 
-
-package:
-	docker buildx build -f Dockerfile \
-		--platform $(BUILD_PLATFORM) \
-		--build-arg VERSION=$(VERSION) \
-		--build-arg BUILD_DATE=$(BUILD_DATE) \
-		-t ${DOCKER_REGISTRY}${GO_PACKAGE}:$(VERSION) \
-		-t ${DOCKER_REGISTRY}${GO_PACKAGE}:$(VERSION_MAJOR).$(VERSION_MINOR) \
-		-t ${DOCKER_REGISTRY}${GO_PACKAGE}:$(VERSION_MAJOR) \
-		--load --no-cache \
-		.
+static: GO_ENV       += CGO_ENABLED=0
+static: GO_LDFLAGS   += -extldflags -static
+static: GO_BUILDTAGS += static_build
+static: build
 
 test:
 	go test ./...
 
-release:
+lint:
+	golangci-lint run ...
+
+clean:
+	go clean
+
+package:
 	docker buildx build -f Dockerfile \
-		--platform $(PACKAGE_PLATFORM) \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg BUILD_DATE=$(BUILD_DATE) \
-		-t ${DOCKER_REGISTRY}${GO_PACKAGE}:$(VERSION) \
-		-t ${DOCKER_REGISTRY}${GO_PACKAGE}:$(VERSION_MAJOR).$(VERSION_MINOR) \
-		-t ${DOCKER_REGISTRY}${GO_PACKAGE}:$(VERSION_MAJOR) \
+		-t $(DOCKER_REGISTRY)$(DOCKER_IMAGE):latest \
+		-t $(DOCKER_REGISTRY)$(DOCKER_IMAGE):$(VERSION) \
+		-t $(DOCKER_REGISTRY)$(DOCKER_IMAGE):$(VERSION_MAJOR).$(VERSION_MINOR) \
+		-t $(DOCKER_REGISTRY)$(DOCKER_IMAGE):$(VERSION_MAJOR) \
+		--load --no-cache \
+		.
+
+release:
+	docker buildx build -f Dockerfile \
+		--platform linux/amd64,linux/arm64,linux/arm/v7 \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		-t $(DOCKER_REGISTRY)$(DOCKER_IMAGE):latest \
+		-t $(DOCKER_REGISTRY)$(DOCKER_IMAGE):$(VERSION) \
+		-t $(DOCKER_REGISTRY)$(DOCKER_IMAGE):$(VERSION_MAJOR).$(VERSION_MINOR) \
+		-t $(DOCKER_REGISTRY)$(DOCKER_IMAGE):$(VERSION_MAJOR) \
 		--push \
 		.

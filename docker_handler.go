@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 	"github.com/prometheus/common/model"
-	"sync"
-	"time"
 )
 
 type dockerHandler struct {
@@ -115,7 +117,7 @@ func (h *dockerHandler) listDockerContainers(ctx context.Context) {
 
 	f := filters.NewArgs(filters.KeyValuePair{Key: "status", Value: "running"},
 		filters.KeyValuePair{Key: "label", Value: prometheusEnableScrapeAnnotation + "=" + prometheusEnableScrapeAnnotationValue})
-	containers, err := h.client.ContainerList(context.Background(), types.ContainerListOptions{
+	containers, err := h.client.ContainerList(context.Background(), container.ListOptions{
 		Filters: f,
 	})
 	if err != nil {

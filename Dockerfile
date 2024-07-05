@@ -1,25 +1,23 @@
-FROM --platform=$BUILDPLATFORM golang as builder
+FROM --platform=$BUILDPLATFORM golang:1.22-alpine AS builder
+
+RUN apk add --no-cache make git
 
 ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION
 ARG BUILD_DATE
 
-COPY . /src
-
 WORKDIR /src
 
-RUN env GOOS=${TARGETOS} GOARCH=${TARGETARCH} CGO_ENABLED=0 go mod download && \
-  export GIT_COMMIT=$(git rev-parse HEAD) && \
-  export GIT_DIRTY=$(test -n "`git status --porcelain`" && echo "+CHANGES" || true) && \
-  env GOOS=${TARGETOS} GOARCH=${TARGETARCH} CGO_ENABLED=0 \
-    go build -o prometheus-docker-labels-discovery \
-    -ldflags "-X github.com/sqooba/go-common/version.GitCommit=${GIT_COMMIT}${GIT_DIRTY} \
-              -X github.com/sqooba/go-common/version.BuildDate=${BUILD_DATE} \
-              -X github.com/sqooba/go-common/version.Version=${VERSION}" \
-    .
+COPY go.mod go.sum /src
+RUN env GOOS=${TARGETOS} GOARCH=${TARGETARCH} CGO_ENABLED=0 go mod download
 
-FROM --platform=$BUILDPLATFORM gcr.io/distroless/base
+COPY . /src
+RUN make static GOOS=${TARGETOS} GOARCH=${TARGETARCH} VERSION=${VERSION} BUILD_DATE=${BUILD_DATE}
+
+FROM alpine
+
+RUN apk add --no-cache ca-certificates
 
 COPY --from=builder /src/prometheus-docker-labels-discovery /prometheus-docker-labels-discovery
 
@@ -29,4 +27,9 @@ COPY --from=builder /src/prometheus-docker-labels-discovery /prometheus-docker-l
 ENTRYPOINT ["/prometheus-docker-labels-discovery"]
 EXPOSE 8080
 
-#HEALTHCHECK --interval=60s --timeout=10s --retries=1 --start-period=30s CMD ["/prometheus-docker-labels-discovery", "--health-check"]
+HEALTHCHECK \
+    --interval=60s \
+    --timeout=10s \
+    --retries=1 \
+    --start-period=30s \
+    CMD ["wget", "-qO/dev/null", "localhost:8080/metrics"]
