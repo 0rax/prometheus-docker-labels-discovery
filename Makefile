@@ -1,4 +1,4 @@
-VERSION		?= v1.0.2
+VERSION		?= v1.0.3
 VERSION_MAJOR	:= $(shell echo $(VERSION) | cut -f1 -d.)
 VERSION_MINOR	:= $(shell echo $(VERSION) | cut -f2 -d.)
 BINARY_NAME	:= prometheus-docker-labels-discovery
