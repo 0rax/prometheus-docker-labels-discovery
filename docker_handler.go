@@ -6,9 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/events"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/prometheus/common/model"
 )
@@ -43,7 +44,6 @@ type containerScrapeConfig struct {
 }
 
 func newDockerHandler(config envConfig, writer *promHandler) (*dockerHandler, error) {
-
 	dockerClient, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, err
@@ -55,7 +55,7 @@ func newDockerHandler(config envConfig, writer *promHandler) (*dockerHandler, er
 		return nil, err
 	}
 
-	networks, err := dockerClient.NetworkList(context.Background(), types.NetworkListOptions{})
+	networks, err := dockerClient.NetworkList(context.Background(), network.ListOptions{})
 	if err != nil {
 		log.Debugf("Got an error while listing the networks, err = %v", err)
 		return nil, err
@@ -85,7 +85,6 @@ func newDockerHandler(config envConfig, writer *promHandler) (*dockerHandler, er
 }
 
 func (h *dockerHandler) handle() error {
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -114,7 +113,6 @@ func (h *dockerHandler) pollDockerContainers(ctx context.Context) {
 }
 
 func (h *dockerHandler) listDockerContainers(ctx context.Context) {
-
 	f := filters.NewArgs(filters.KeyValuePair{Key: "status", Value: "running"},
 		filters.KeyValuePair{Key: "label", Value: prometheusEnableScrapeAnnotation + "=" + prometheusEnableScrapeAnnotationValue})
 	containers, err := h.client.ContainerList(context.Background(), container.ListOptions{
@@ -138,9 +136,8 @@ func (h *dockerHandler) listDockerContainers(ctx context.Context) {
 }
 
 func (h *dockerHandler) listenToDockerEvents(ctx context.Context) {
-
 	ctx, cancel := context.WithCancel(context.Background())
-	eventsChan, errsChan := h.client.Events(ctx, types.EventsOptions{})
+	eventsChan, errsChan := h.client.Events(ctx, events.ListOptions{})
 
 	defer func() {
 		cancel()
@@ -153,11 +150,11 @@ func (h *dockerHandler) listenToDockerEvents(ctx context.Context) {
 		case event := <-eventsChan:
 			log.Tracef("Got an event %v", event)
 			if event.Type == dockerEventTypeContainer && event.Action == dockerEventActionStart {
-				log.Infof("Got a start of container %s", event.ID)
-				h.startContainerChan <- []string{event.ID}
+				log.Infof("Got a start of container %s", event.Actor.ID)
+				h.startContainerChan <- []string{event.Actor.ID}
 			} else if event.Type == dockerEventTypeContainer && event.Action == dockerEventActionDie {
-				log.Infof("Got a stop of container %s", event.ID)
-				h.stopContainerChan <- []string{event.ID}
+				log.Infof("Got a stop of container %s", event.Actor.ID)
+				h.stopContainerChan <- []string{event.Actor.ID}
 			}
 		case err := <-errsChan:
 			log.Fatalf("Got an error while listening to events, err = %v", err)
@@ -167,7 +164,6 @@ func (h *dockerHandler) listenToDockerEvents(ctx context.Context) {
 }
 
 func (h *dockerHandler) addContainersToScrapeConfig(containerIds []string) {
-
 	log.Debugf("addContainersToScrapeConfig for %v", containerIds)
 
 	h.lock.Lock()
@@ -200,7 +196,6 @@ func (h *dockerHandler) addContainersToScrapeConfig(containerIds []string) {
 }
 
 func (h *dockerHandler) removeContainersFromScrapeConfig(containerIds []string) {
-
 	log.Debugf("removeContainersFromScrapeConfig for %v", containerIds)
 
 	h.lock.Lock()
@@ -225,7 +220,6 @@ func (h *dockerHandler) removeContainersFromScrapeConfig(containerIds []string) 
 }
 
 func (h *dockerHandler) findHostPortAndPathForContainer(containerId string) (bool, containerScrapeConfig, error) {
-
 	containerScrapeConfig := containerScrapeConfig{
 		Labels: make(map[string]string),
 	}

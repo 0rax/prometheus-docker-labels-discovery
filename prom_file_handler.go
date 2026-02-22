@@ -15,7 +15,6 @@ type promHandler struct {
 }
 
 func newPromFileHandler(config envConfig) (*promHandler, error) {
-
 	if !strings.HasSuffix(config.PrometheusConfigFilePath, ".json") {
 		return nil, fmt.Errorf("file does not have .json extension")
 	}
@@ -33,7 +32,6 @@ func newPromFileHandler(config envConfig) (*promHandler, error) {
 }
 
 func (h *promHandler) write(containersScrapeConfig map[string]containerScrapeConfig) error {
-
 	targetGroups := make([]containerScrapeConfig, 0, len(containersScrapeConfig))
 	for _, v := range containersScrapeConfig {
 		targetGroups = append(targetGroups, v)
@@ -43,7 +41,7 @@ func (h *promHandler) write(containersScrapeConfig map[string]containerScrapeCon
 		return err
 	}
 	log.Debugf("Write %s to %s", string(data), h.config.PrometheusConfigFilePath)
-	err = os.WriteFile(h.config.PrometheusConfigFilePath, data, 0644)
+	err = os.WriteFile(h.config.PrometheusConfigFilePath, data, 0o644)
 	if err != nil {
 		return err
 	}

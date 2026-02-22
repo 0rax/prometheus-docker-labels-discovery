@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.23-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 
 RUN apk add --no-cache make git
 
@@ -9,22 +9,24 @@ ARG BUILD_DATE
 
 WORKDIR /src
 
-COPY go.mod go.sum /src
+COPY go.mod go.sum /src/
 RUN env GOOS=${TARGETOS} GOARCH=${TARGETARCH} CGO_ENABLED=0 go mod download
 
-COPY . /src
+COPY . /src/
 RUN make static GOOS=${TARGETOS} GOARCH=${TARGETARCH} VERSION=${VERSION} BUILD_DATE=${BUILD_DATE}
 
 FROM alpine
 
 RUN apk add --no-cache ca-certificates
 
+COPY entrypoint.sh /entrypoint.sh
 COPY --from=builder /src/prometheus-docker-labels-discovery /prometheus-docker-labels-discovery
 
 # Because of access to docker.sock, it's easier to run it as root...
 #USER nobody
 
-ENTRYPOINT ["/prometheus-docker-labels-discovery"]
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["/prometheus-docker-labels-discovery"]
 EXPOSE 8080
 
 HEALTHCHECK \
